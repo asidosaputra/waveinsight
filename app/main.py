@@ -106,6 +106,7 @@ if menu == "1. Prepare Shot":
                             st.session_state.data_gather = gathers
                             st.session_state.data_header = trace_header
                             st.session_state.dt = dt*1e-6
+
                             st.success("Loading data Succesfully")
 
                         except:
@@ -173,7 +174,7 @@ if menu == "1. Prepare Shot":
                 col31, col32, col33 = st.columns([2, 2, 2])
                 if filter_selected == "None":
                     with col31:
-                        _,freq, spectrum = extract_amplitude_and_spectrum(gather, st.session_state.dt)
+                        _,freq, spectrum = extract_amplitude_and_spectrum(gather.T, st.session_state.dt)
                         df = pd.DataFrame({"Frequency (Hz)": freq, "Amplitude": spectrum})
                         fig = px.line(df, x="Frequency (Hz)", y="Amplitude")
                         fig.update_layout(template="plotly_white", height=500)
@@ -202,7 +203,8 @@ if menu == "1. Prepare Shot":
                     if "highcut_gather" not in st.session_state:
                         st.session_state.highcut_gather = 60.0
 
-                    _,freq, spectrum = extract_amplitude_and_spectrum(gather, st.session_state.dt)
+                    # _,freq, spectrum = extract_amplitude_and_spectrum(gather.T, st.session_state.dt)
+                    
                     with col22:
                         col11_22, col12_22, col13_22, col14_22 = st.columns([1, 1, 1, 4])
                         with col11_22:
@@ -220,8 +222,8 @@ if menu == "1. Prepare Shot":
                     gather_filtered = butter_bandpass_filter(gather, st.session_state.dt, st.session_state.lowcut_gather, st.session_state.highcut_gather, order=4)
 
                     with col31:
-                        _,freq, spectrum = extract_amplitude_and_spectrum(gather, st.session_state.dt)
-                        _,freq, spectrum_filter = extract_amplitude_and_spectrum(gather_filtered, st.session_state.dt)
+                        _,freq, spectrum = extract_amplitude_and_spectrum(gather.T, st.session_state.dt)
+                        _,freq, spectrum_filter = extract_amplitude_and_spectrum(gather_filtered.T, st.session_state.dt)
                         # Inisialisasi plot
                         fig = go.Figure()
 
@@ -333,7 +335,8 @@ elif menu == "2. Prepare Model":
     col11, col12 = st.columns([1, 3])
     with col11:
         selected_type_model = st.selectbox("How would you like to create the initial model??", ["Generate", "Upload"])
-    
+
+    print(selected_type_model)
     if selected_type_model == "Generate":
         # Form untuk parameter model
         with st.expander("Cell Model Parameters"):
@@ -459,6 +462,12 @@ elif menu == "2. Prepare Model":
 
                 st.plotly_chart(fig, use_container_width=True)
 
+    elif selected_type_model == "Upload":
+        print("Masuk sini")
+        col1, col2 = st.columns([1, 3])
+        with col1:
+            selected_format_upload_model = st.selectbox("Choose format of initial model!", [".sgy", ".h5", ".txt"])
+
     with st.expander("Downdload"):
         if st.session_state.initial_model is not None:
             if st.button("Process Data"):
@@ -544,14 +553,41 @@ elif menu == "3. Imaging":
                     max_iter = st.number_input("Max Iteration", min_value=1, max_value=100, step=1)
                 
                 col21, col22, col23 = st.columns([1,1,1])
-                with st.container():
-                    with col21:
-                        bound_vel_min = st.number_input("Min Velocity Bound (m/s)", min_value=100.00, max_value=10000.0, step=10.0)
-                    with col22:
-                        bound_vel_max = st.number_input("Max Velocity Bound (m/s)", min_value=100.00, max_value=10000.0, step=10.0)
-                    with col23:
-                        sea_water_base = st.number_input("Bottom Sea Water Depth (m)", min_value=1.00, max_value=10000.0, step=10.0)
+                # with st.container():
+                with col21:
+                    bound_vel_min = st.number_input("Min Velocity Bound (m/s)", min_value=100.00, max_value=10000.0, step=10.0)
+                with col22:
+                    bound_vel_max = st.number_input("Max Velocity Bound (m/s)", min_value=100.00, max_value=10000.0, step=10.0)
+                with col23:
+                    sea_water_base = st.number_input("Bottom Sea Water Depth (m)", min_value=1.00, max_value=10000.0, step=10.0)
 
+                if selected_objective =="SI_FWI":
+                    if "header_data" not in st.session_state:
+                        st.session_state.header_data, _ = read_header_only(PATH_SHOT)
+                    else:
+                        st.session_state.header_data, _ = read_header_only(PATH_SHOT)
+            
+                    ffid_uniq = np.unique(st.session_state.header_data["ffid"])
+
+                    with col21:
+                        shot_id = st.selectbox("Shot FFID", ffid_uniq)
+                        
+                        t_min = st.number_input("Min Time (ms)", min_value=0, max_value=10000, step=1)
+
+                    with col22:
+                        trace_id = st.number_input("Trace ID", min_value=1, max_value=10000, step=1)
+                        t_max = st.number_input("Max Time (ms)", min_value=0, max_value=10000, step=1)
+                        
+
+                    with col23:
+                        trace_num = st.number_input("Number Trace", min_value=1, max_value=10000, step=1)
+                else:
+                    shot_id = None
+                    t_min = None
+                    t_max = None
+                    trace_id = None
+                    trace_num = None
+                        
                 # Inisialisasi session_state jika belum ada
                 if "julia_process" not in st.session_state:
                     st.session_state.julia_process = None
@@ -559,9 +595,19 @@ elif menu == "3. Imaging":
                 if st.button("RUN FWI", type="primary"):
                     st.write("Loading FWI Parameteres..")
                     try:
-                        st.session_state.fwi_parameters = {"freq":freq, "iteration":max_iter, "objective_function":selected_objective.lower(), "min_vel":bound_vel_min, "max_vel":bound_vel_max, "sea_water_base":sea_water_base}
+                        st.session_state.fwi_parameters = {"freq":freq, "iteration":max_iter, 
+                                                           "objective_function":selected_objective.lower(), 
+                                                           "min_vel":bound_vel_min, "max_vel":bound_vel_max, 
+                                                           "sea_water_base":sea_water_base,
+                                                           "shot_id": shot_id,
+                                                           "trc_id_ref":trace_id,
+                                                           "num_trace":trace_num,
+                                                           "tmin_ref":t_min,
+                                                           "tmax_ref":t_max}
+                        
                         with open(PATH_PARAMS, 'w') as f:
                             json.dump(st.session_state.fwi_parameters, f)
+
                         st.success("Succes Saving Inversion Parameters")
                         st.write("Inversion in Progress..")
 
@@ -575,13 +621,13 @@ elif menu == "3. Imaging":
                             if os.path.exists(log_file):
                                 os.remove(log_file)
 
-                            # Jalankan Julia
                             process = subprocess.Popen(
-                                ["/opt/julia-1.10.9/bin/julia", "julia_scripts/spg_fwi.jl"],
+                                ["/opt/julia-1.10.9/bin/julia", "julia_scripts/run_fwi.jl"],
                                 stdout=subprocess.PIPE,
                                 stderr=subprocess.PIPE,
                                 text=True
                             )
+
                             st.session_state.julia_process = process  # Simpan ke session_state
 
                             # Monitoring

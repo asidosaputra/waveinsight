@@ -31,26 +31,18 @@ def butter_bandpass_filter(gather_2d, dt, lowcut, highcut, order=4):
 
 def extract_amplitude_and_spectrum(gather_2d, dt):
     """
-    Ekstrak amplitude (rms) dan spektrum frekuensi dari 2D gather.
-    
-    Parameters:
-    - gather_2d: numpy array dengan shape (n_traces, n_samples)
-    - dt: sampling interval (dalam detik)
-    
-    Returns:
-    - rms_amplitude: array (n_samples,), nilai RMS dari semua trace
-    - freq: array frekuensi (Hz)
-    - spectrum: array spektrum magnitude (rata-rata dari semua trace)
+    gather_2d: numpy array dengan shape (n_traces, n_samples)
     """
     # RMS Amplitude per waktu
     rms_amplitude = np.sqrt(np.mean(gather_2d ** 2, axis=0))
 
-    # FFT
-    fft_vals = np.fft.rfft(gather_2d, axis=1)  # FFT per trace
-    spectrum = np.mean(np.abs(fft_vals), axis=0)  # Mean magnitude
+    # FFT per trace
+    fft_vals = np.fft.rfft(gather_2d, axis=1)
+    spectrum = np.mean(np.abs(fft_vals), axis=0)
     freq = np.fft.rfftfreq(gather_2d.shape[1], dt)
 
     return rms_amplitude, freq, spectrum
+
 
 def filter_all_shot_data(gathers, dt, lowcut, highcut, order=4):
     gathers_filter = {}
@@ -175,6 +167,67 @@ def read_segy(filepath, byte_location=None):
         }
         dt = f.header[1][segyio.TraceField.TRACE_SAMPLE_INTERVAL]
         return trace_header, gathers, dt
+
+def read_header_only(filepath, byte_location=None):
+    with segyio.open(filepath, "r", ignore_geometry=True) as f:
+        f.mmap()  # Percepat akses header/trace dengan memory mapping
+        
+        trace_number = []
+        ffid = []
+        sx = []
+        sy = []
+        gx = []
+        gy = []
+
+        for i in range(f.tracecount):
+            hdr = f.header[i]
+            coord_scalar = hdr.get(segyio.TraceField.SourceGroupScalar, 1)
+            if byte_location is None:
+                trace_number.append(hdr[segyio.TraceField.TRACE_SEQUENCE_LINE])
+                ffid_i = hdr[segyio.TraceField.FieldRecord]
+                ffid.append(ffid_i)
+                sx_i = hdr[segyio.TraceField.SourceX]
+                sy_i = hdr[segyio.TraceField.SourceY]
+                gx_i = hdr[segyio.TraceField.GroupX]
+                gy_i = hdr[segyio.TraceField.GroupY]
+                
+            else:
+                trace_number.append(f.header[i][byte_location["trace_number"]])
+                ffid_i = hdr[byte_location["ffid"]]
+                ffid.append(ffid_i)
+                sx_i = hdr[byte_location["sx"]]
+                sy_i = hdr[byte_location["sy"]]
+                gx_i = hdr[byte_location["gx"]]
+                gy_i = hdr[byte_location["gy"]]
+
+            # Terapkan skala koordinat
+            if coord_scalar > 1:
+                sx_i *= coord_scalar
+                sy_i *= coord_scalar
+                gx_i *= coord_scalar
+                gy_i *= coord_scalar
+            elif coord_scalar < 0:
+                sx_i /= abs(coord_scalar)
+                sy_i /= abs(coord_scalar)
+                gx_i /= abs(coord_scalar)
+                gy_i /= abs(coord_scalar)
+
+            sx.append(sx_i)
+            sy.append(sy_i)
+            gx.append(gx_i)
+            gy.append(gy_i)
+
+
+        trace_header = {
+            "trace_number": trace_number,
+            "ffid": ffid,
+            "sx": sx,
+            "sy": sy,
+            "gx": gx,
+            "gy": gy
+        }
+        dt = f.header[1][segyio.TraceField.TRACE_SAMPLE_INTERVAL]
+        return trace_header, dt
 
 def get_geom_uniq(trace_header):
     sx,idx_uniq_src = np.unique(trace_header["sx"], return_index=True)

@@ -1,6 +1,10 @@
-app/imaging_parameters/fwi_params/inversion_params.json
-app/imaging_parameters/logs/log.txt
-app/imaging_parameters/models/init_model.h5
-app/imaging_parameters/shots/real_data.sgy
-app/results/final/final_results.h5
-app/results/progress
+# app/imaging_parameters/fwi_params/inversion_params.json
+# app/imaging_parameters/logs/log.txt
+# app/imaging_parameters/models/init_model.h5
+# app/imaging_parameters/shots/real_data.sgy
+# app/results/final/final_results.h5
+# app/results/progress
+# app/dev_stage
+.ipynb_checkpoints
+app/dev_stage
+app/utils/__pycache__
